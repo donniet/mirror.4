@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+<head>
+  <title>Mirror</title>
+  <script type="text/javascript">
+    function load() {
+      var ws = new WebSocket('{{.WebsocketURL}}');
+      ws.onopen = function(e) {
+        console.log('websocket opened');
+
+        ws.onmessage = function(e) {
+          console.log('message: ', JSON.parse(e.data));
+        }
+
+        ws.send(JSON.stringify({
+          method: 'GET',
+          path: '/'
+        }));
+      }
+    }
+  </script>
+</head>
+<body onload="load()">
+  <h1>Mirror</h1>
+</body>
+</html>
