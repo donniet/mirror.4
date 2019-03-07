@@ -12,16 +12,37 @@ import (
 	"time"
 )
 
+const (
+	defaultLat  = 44.8881782
+	defaultLong = -93.2280129
+)
+
 var (
 	addr       = "localhost:8081"
-	weatherURL = "http://api.wunderground.com/api/52a3d65a04655627/forecast/q/MN/Minneapolis.json"
+	weatherKey = ""
+	lat        = defaultLat
+	long       = defaultLong
 	statePath  = "state.json"
 )
 
 func init() {
 	flag.StringVar(&addr, "addr", addr, "address to run webserver")
-	flag.StringVar(&weatherURL, "weatherURL", weatherURL, "weather underground url")
+	flag.StringVar(&weatherKey, "weatherKey", weatherKey, "darksky api key")
+	flag.Float64Var(&lat, "lat", lat, "lattitude")
+	flag.Float64Var(&long, "long", long, "longitude")
 	flag.StringVar(&statePath, "statePath", statePath, "path to save state")
+}
+
+func mustExecuteTemplate(fileName string, templateName string, dat interface{}) []byte {
+	buf := &bytes.Buffer{}
+
+	if tmpl, err := template.ParseFiles(fileName); err != nil {
+		log.Fatalf("could not parse template: %v", err)
+	} else if err := tmpl.ExecuteTemplate(buf, templateName, dat); err != nil {
+		log.Fatalf("error executing template: %v", err)
+	}
+
+	return buf.Bytes()
 }
 
 func main() {
@@ -33,7 +54,7 @@ func main() {
 
 	signal.Notify(interrupt, os.Interrupt)
 
-	state := NewState(weatherURL, 1*time.Hour, stopper)
+	state := NewState(weatherKey, 1*time.Hour, float32(lat), float32(long), stopper)
 
 	if err := state.Load(statePath); err != nil {
 		switch err.(type) {
@@ -44,15 +65,9 @@ func main() {
 		}
 	}
 
-	indexBytes := &bytes.Buffer{}
-
-	if tmpl, err := template.ParseFiles("client/index.html"); err != nil {
-		log.Fatalf("could not parse template: %v", err)
-	} else if err := tmpl.ExecuteTemplate(indexBytes, "index.html", map[string]interface{}{
+	indexBytes := mustExecuteTemplate("client/index.html", "index.html", map[string]interface{}{
 		"WebsocketURL": template.URL(fmt.Sprintf("ws://%s/websocket", addr)),
-	}); err != nil {
-		log.Fatalf("error executing template: %v", err)
-	}
+	})
 
 	sockets := NewSockets(state, stopper)
 
@@ -61,7 +76,7 @@ func main() {
 	mux.Handle("/websocket", sockets)
 	mux.Handle("/client/", http.StripPrefix("/client/", http.FileServer(http.Dir("client"))))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write(indexBytes.Bytes())
+		w.Write(indexBytes)
 	})
 
 	s := http.Server{

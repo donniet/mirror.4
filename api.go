@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/donniet/darksky"
 )
 
 type Statuser interface {
@@ -29,33 +31,45 @@ type Poster interface {
 }
 
 type forecast struct {
-	High      float64   `json:"high"`
-	Low       float64   `json:"low"`
-	Icon      string    `json:"icon"`
-	DateTime  time.Time `json:"dateTime"`
-	Visible   bool      `json:"visible"`
-	updateUrl string
-	timeout   time.Duration
-	lock      sync.Locker
-	state     *State
+	High     float32   `json:"high"`
+	Low      float32   `json:"low"`
+	Current  float32   `json:"current"`
+	Summary  string    `json:"summary"`
+	Icon     string    `json:"icon"`
+	DateTime time.Time `json:"dateTime"`
+	Visible  bool      `json:"visible"`
+	key      string
+	lat      float32
+	long     float32
+	timeout  time.Duration
+	lock     sync.Locker
+	state    *State
 }
 
 func (f *forecast) Update() error {
-	svc := WeatherService{
-		URL:     f.updateUrl,
-		Timeout: f.timeout,
-	}
+	s := darksky.NewService(f.key)
 
-	if w, err := svc.GetWeather(); err != nil {
+	if w, err := s.Get(f.lat, f.long); err != nil {
 		return err
 	} else {
 		f.lock.Lock()
 		defer f.lock.Unlock()
 
-		f.High = w.High
-		f.Low = w.Low
-		f.Icon = w.Icon
-		f.DateTime = w.DateTime
+		f.High = w.Daily.Data[0].TemperatureHigh
+		f.Low = w.Daily.Data[0].TemperatureLow
+		// f.Icon = w.Daily.Data[0].Icon
+		f.Summary = w.Daily.Data[0].Summary
+
+		now := time.Now()
+		for _, d := range w.Hourly.Data {
+			if time.Time(d.Time).Sub(now) < 0 {
+				continue
+			}
+
+			f.Current = d.Temperature
+			f.DateTime = time.Time(d.Time)
+			f.Icon = d.Icon
+		}
 
 		if f.state.OnChanged != nil {
 			go f.state.OnChanged()
@@ -72,45 +86,11 @@ func (f *forecast) MarshalJSON() ([]byte, error) {
 		"high":     f.High,
 		"low":      f.Low,
 		"icon":     f.Icon,
+		"current":  f.Current,
+		"summary":  f.Summary,
 		"dateTime": f.DateTime,
 		"visible":  f.Visible,
 	})
-}
-
-type NotFoundError struct {
-	message string
-}
-
-func (e *NotFoundError) Error() string {
-	return e.message
-}
-func (e *NotFoundError) Status() int {
-	return http.StatusNotFound
-}
-func NewNotFoundError(path string) *NotFoundError {
-	return &NotFoundError{message: fmt.Sprintf("path not found '%s'", path)}
-}
-
-type InvalidMethodError struct {
-	message string
-}
-
-func (e *InvalidMethodError) Error() string {
-	return e.message
-}
-func (e *InvalidMethodError) Status() int {
-	return http.StatusMethodNotAllowed
-}
-
-type BadRequestError struct {
-	message string
-}
-
-func (e *BadRequestError) Error() string {
-	return e.message
-}
-func (e *BadRequestError) Status() int {
-	return http.StatusBadRequest
 }
 
 func (f *forecast) Get(path string) (*json.RawMessage, error) {
@@ -579,12 +559,14 @@ type State struct {
 	OnChanged func()    `json:"-"`
 }
 
-func NewState(weatherURL string, weatherUpdateInterval time.Duration, stopper <-chan struct{}) *State {
+func NewState(weatherKey string, weatherUpdateInterval time.Duration, lat float32, long float32, stopper <-chan struct{}) *State {
 	s := &State{
 		Forecast: &forecast{
-			updateUrl: weatherURL,
-			lock:      &sync.Mutex{},
-			timeout:   1 * time.Minute,
+			key:     weatherKey,
+			lat:     lat,
+			long:    long,
+			lock:    &sync.Mutex{},
+			timeout: 1 * time.Minute,
 		},
 		Display: &display{
 			PowerStatus: "on",
@@ -608,16 +590,22 @@ func NewState(weatherURL string, weatherUpdateInterval time.Duration, stopper <-
 	return s
 }
 
+func logPrintIf(err error) {
+	if err != nil {
+		log.Print(err)
+	}
+}
+
 func (s *State) background(weatherUpdateInterval time.Duration, stopper <-chan struct{}) {
 	// background thread
 	ticker := time.NewTicker(weatherUpdateInterval)
 
-	s.Forecast.Update()
+	logPrintIf(s.Forecast.Update())
 
 	for {
 		select {
 		case <-ticker.C:
-			s.Forecast.Update()
+			logPrintIf(s.Forecast.Update())
 		case <-stopper:
 			log.Printf("shutting down worker thread")
 			return
@@ -814,4 +802,40 @@ func (s *State) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	} else if loc != "" {
 		w.Header().Add("Location", loc)
 	}
+}
+
+type NotFoundError struct {
+	message string
+}
+
+func (e *NotFoundError) Error() string {
+	return e.message
+}
+func (e *NotFoundError) Status() int {
+	return http.StatusNotFound
+}
+func NewNotFoundError(path string) *NotFoundError {
+	return &NotFoundError{message: fmt.Sprintf("path not found '%s'", path)}
+}
+
+type InvalidMethodError struct {
+	message string
+}
+
+func (e *InvalidMethodError) Error() string {
+	return e.message
+}
+func (e *InvalidMethodError) Status() int {
+	return http.StatusMethodNotAllowed
+}
+
+type BadRequestError struct {
+	message string
+}
+
+func (e *BadRequestError) Error() string {
+	return e.message
+}
+func (e *BadRequestError) Status() int {
+	return http.StatusBadRequest
 }
