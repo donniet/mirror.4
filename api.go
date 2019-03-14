@@ -45,32 +45,34 @@ type forecast struct {
 	lock     sync.Locker
 }
 
-func (f *forecast) Update() error {
+func (f *forecast) Update() (err error) {
 	s := darksky.NewService(f.key)
 
-	if w, err := s.Get(f.lat, f.long); err != nil {
+	var w darksky.Response
+
+	if w, err = s.Get(f.lat, f.long); err != nil {
 		return err
-	} else {
-		f.lock.Lock()
-		defer f.lock.Unlock()
-
-		f.High = w.Daily.Data[0].TemperatureHigh
-		f.Low = w.Daily.Data[0].TemperatureLow
-		// f.Icon = w.Daily.Data[0].Icon
-		f.Summary = w.Daily.Data[0].Summary
-
-		now := time.Now()
-		for _, d := range w.Hourly.Data {
-			if time.Time(d.Time).Sub(now) < 0 {
-				continue
-			}
-
-			f.Current = d.Temperature
-			f.DateTime = time.Time(d.Time)
-			f.Icon = d.Icon
-		}
 	}
-	return nil
+	f.lock.Lock()
+	defer f.lock.Unlock()
+
+	f.High = w.Daily.Data[0].TemperatureHigh
+	f.Low = w.Daily.Data[0].TemperatureLow
+	// f.Icon = w.Daily.Data[0].Icon
+	f.Summary = w.Daily.Data[0].Summary
+
+	now := time.Now()
+	for _, d := range w.Hourly.Data {
+		if time.Time(d.Time).Sub(now) < 0 {
+			continue
+		}
+
+		f.Current = d.Temperature
+		f.DateTime = time.Time(d.Time)
+		f.Icon = d.Icon
+	}
+
+	return
 }
 
 func (f *forecast) MarshalJSON() ([]byte, error) {
