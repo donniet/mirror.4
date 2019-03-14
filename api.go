@@ -104,6 +104,10 @@ func (f *forecast) Get(path string) (*json.RawMessage, error) {
 		dat = f.High
 	case "low":
 		dat = f.Low
+	case "current":
+		dat = f.Current
+	case "summary":
+		dat = f.Summary
 	case "icon":
 		dat = f.Icon
 	case "dateTime":
@@ -170,6 +174,35 @@ type faces struct {
 	Detections    []FaceDetection `json:"detections"`
 	MaxDetections int             `json:"maxDetections"`
 	lock          sync.Locker
+}
+
+func (s *faces) Put(path string, body *json.RawMessage) (string, error) {
+	d := FaceDetection{}
+
+	if path != "detections" {
+		return "", NewNotFoundError(path)
+	} else if body == nil {
+		return "", &BadRequestError{message: "body is nil"}
+	} else if err := json.Unmarshal(*body, &d); err != nil {
+		return "", err
+	}
+
+	if d.DateTime == (time.Time{}) {
+		d.DateTime = time.Now()
+	}
+	if d.Confidence == 0. {
+		d.Confidence = 1.0
+	}
+
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	if len(s.Detections) >= s.MaxDetections {
+		s.Detections = s.Detections[0 : s.MaxDetections-1]
+	}
+	s.Detections = append([]FaceDetection{d}, s.Detections...)
+
+	return "detections/0", nil
 }
 
 func (f *faces) MarshalJSON() ([]byte, error) {
@@ -331,6 +364,38 @@ func (m *motion) Get(path string) (*json.RawMessage, error) {
 	} else {
 		return (*json.RawMessage)(&b), nil
 	}
+}
+
+func (m *motion) Put(path string, body *json.RawMessage) (string, error) {
+	switch path {
+	case "detections":
+	default:
+		return "", NewNotFoundError(path)
+	}
+
+	if body == nil {
+		return "", &BadRequestError{message: "body is nil"}
+	}
+
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	d := motionDetection{}
+	if err := json.Unmarshal(*body, &d); err != nil {
+		return "", &BadRequestError{message: err.Error()}
+	}
+
+	if d.DateTime == (time.Time{}) {
+		d.DateTime = time.Now()
+	}
+
+	m.Detections = append([]motionDetection{d}, m.Detections...)
+
+	if len(m.Detections) >= m.MaxDetections {
+		m.Detections = m.Detections[0:m.MaxDetections]
+	}
+
+	return "detections/0", nil
 }
 
 func (m *motion) Post(path string, body *json.RawMessage) (string, error) {
@@ -719,6 +784,10 @@ func (s *State) Put(path string, body *json.RawMessage) (string, error) {
 	switch first {
 	case "streams":
 		rest, err = s.Streams.Put(rest, body)
+	case "motion":
+		rest, err = s.Motion.Put(rest, body)
+	case "faces":
+		rest, err = s.Faces.Put(rest, body)
 	default:
 		err = &InvalidMethodError{message: "PUT not supported"}
 	}
