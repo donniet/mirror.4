@@ -43,7 +43,6 @@ type forecast struct {
 	long     float32
 	timeout  time.Duration
 	lock     sync.Locker
-	state    *State
 }
 
 func (f *forecast) Update() error {
@@ -69,10 +68,6 @@ func (f *forecast) Update() error {
 			f.Current = d.Temperature
 			f.DateTime = time.Time(d.Time)
 			f.Icon = d.Icon
-		}
-
-		if f.state.OnChanged != nil {
-			go f.state.OnChanged()
 		}
 	}
 	return nil
@@ -648,8 +643,6 @@ func NewState(weatherKey string, weatherUpdateInterval time.Duration, lat float3
 			lock: &sync.Mutex{},
 		},
 	}
-	s.Forecast.state = s
-
 	go s.background(weatherUpdateInterval, stopper)
 
 	return s
@@ -665,12 +658,20 @@ func (s *State) background(weatherUpdateInterval time.Duration, stopper <-chan s
 	// background thread
 	ticker := time.NewTicker(weatherUpdateInterval)
 
-	logPrintIf(s.Forecast.Update())
+	if err := s.Forecast.Update(); err != nil {
+		s.OnChanged()
+	} else {
+		log.Print(err)
+	}
 
 	for {
 		select {
 		case <-ticker.C:
-			logPrintIf(s.Forecast.Update())
+			if err := s.Forecast.Update(); err != nil {
+				s.OnChanged()
+			} else {
+				log.Print(err)
+			}
 		case <-stopper:
 			log.Printf("shutting down worker thread")
 			return
