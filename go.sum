@@ -1,2 +1,4 @@
+github.com/donniet/darksky v0.0.0-20190308121213-3741586bdeee h1:tcrszjMAX49jcCHyx0R/3M9d1sI5UATYD2Clsaa+nJQ=
+github.com/donniet/darksky v0.0.0-20190308121213-3741586bdeee/go.mod h1:v2w7M78/8X+zMJ25wNv9LNJtosuFgRxnc01nO3QPT3c=
 github.com/gorilla/websocket v1.4.0 h1:WDFjx/TMzVgy9VdMMQi2K2Emtwi2QcUQsztZ/zLaH/Q=
 github.com/gorilla/websocket v1.4.0/go.mod h1:E7qHFY5m1UJ88s3WnNqhKjPHQ0heANvMoAMk2YaljkQ=

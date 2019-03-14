@@ -33,12 +33,21 @@ func init() {
 	flag.StringVar(&statePath, "statePath", statePath, "path to save state")
 }
 
+<<<<<<< HEAD
 func mustExecuteTemplate(fileName string, templateName string, dat interface{}) []byte {
 	buf := &bytes.Buffer{}
 
 	if tmpl, err := template.ParseFiles(fileName); err != nil {
 		log.Fatalf("could not parse template: %v", err)
 	} else if err := tmpl.ExecuteTemplate(buf, templateName, dat); err != nil {
+=======
+func readIndexTemplate(dat interface{}) []byte {
+	buf := &bytes.Buffer{}
+
+	if tmpl, err := template.ParseFiles("client/index.html"); err != nil {
+		log.Fatalf("could not parse template: %v", err)
+	} else if err := tmpl.ExecuteTemplate(buf, "index.html", dat); err != nil {
+>>>>>>> added template
 		log.Fatalf("error executing template: %v", err)
 	}
 
@@ -56,16 +65,15 @@ func main() {
 
 	state := NewState(weatherKey, 1*time.Hour, float32(lat), float32(long), stopper)
 
-	if err := state.Load(statePath); err != nil {
-		switch err.(type) {
-		case *os.PathError:
-			// do nothing, path doesn't exist
-		default:
-			log.Fatal(err)
-		}
+	if err := state.Load(statePath); err != nil && err != os.ErrNotExist {
+		log.Fatal(err)
 	}
 
+<<<<<<< HEAD
 	indexBytes := mustExecuteTemplate("client/index.html", "index.html", map[string]interface{}{
+=======
+	indexBytes := readIndexTemplate(map[string]interface{}{
+>>>>>>> added template
 		"WebsocketURL": template.URL(fmt.Sprintf("ws://%s/websocket", addr)),
 	})
 
@@ -79,11 +87,6 @@ func main() {
 		w.Write(indexBytes)
 	})
 
-	s := http.Server{
-		Addr:    addr,
-		Handler: mux,
-	}
-
 	state.OnChanged = func() {
 		if err := state.Save(statePath); err != nil {
 			log.Fatal(err)
@@ -92,6 +95,11 @@ func main() {
 	}
 	// try saving the state, better to fail now than later
 	state.OnChanged()
+
+	s := http.Server{
+		Addr:    addr,
+		Handler: mux,
+	}
 
 	// graceful shutdown on interrupt
 	go func() {
