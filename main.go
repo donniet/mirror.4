@@ -36,7 +36,7 @@ func init() {
 func mustExecuteTemplate(fileName string, templateName string, dat interface{}) []byte {
 	buf := &bytes.Buffer{}
 
-	if tmpl, err := template.ParseFiles(fileName); err != nil {
+	if tmpl, err := template.New("index.html").Delims("[[", "]]").ParseFiles(fileName); err != nil {
 		log.Fatalf("could not parse template: %v", err)
 	} else if err := tmpl.ExecuteTemplate(buf, templateName, dat); err != nil {
 		log.Fatalf("error executing template: %v", err)
@@ -60,10 +60,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	indexBytes := mustExecuteTemplate("client/index.html", "index.html", map[string]interface{}{
-		"WebsocketURL": template.URL(fmt.Sprintf("ws://%s/websocket", addr)),
-	})
-
 	sockets := NewSockets(state, stopper)
 
 	mux := http.NewServeMux()
@@ -71,6 +67,10 @@ func main() {
 	mux.Handle("/websocket", sockets)
 	mux.Handle("/client/", http.StripPrefix("/client/", http.FileServer(http.Dir("client"))))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		indexBytes := mustExecuteTemplate("client/index.html", "index.html", map[string]interface{}{
+			"WebsocketURL": template.URL(fmt.Sprintf("ws://%s/websocket", addr)),
+		})
+
 		w.Write(indexBytes)
 	})
 

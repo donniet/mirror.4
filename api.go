@@ -51,8 +51,10 @@ func (f *forecast) Update() (err error) {
 	var w darksky.Response
 
 	if w, err = s.Get(f.lat, f.long); err != nil {
+		log.Printf("error getting forecast %v", err)
 		return err
 	}
+
 	f.lock.Lock()
 	defer f.lock.Unlock()
 
@@ -90,6 +92,34 @@ func (f *forecast) MarshalJSON() ([]byte, error) {
 	})
 }
 
+func (f *forecast) UnmarshalJSON(b []byte) error {
+	t := struct {
+		High     float32   `json:"high"`
+		Low      float32   `json:"low"`
+		Icon     string    `json:"icon"`
+		Current  float32   `json:"current"`
+		Summary  string    `json:"summary"`
+		DateTime time.Time `json:"dateTime"`
+		Visible  bool      `json:"visible"`
+	}{}
+
+	if err := json.Unmarshal(b, &t); err != nil {
+		return err
+	}
+
+	f.lock.Lock()
+	defer f.lock.Unlock()
+
+	f.High = t.High
+	f.Low = t.Low
+	f.Icon = t.Icon
+	f.Current = t.Current
+	f.Summary = t.Summary
+	f.DateTime = t.DateTime
+	f.Visible = t.Visible
+	return nil
+}
+
 func (f *forecast) Get(path string) (*json.RawMessage, error) {
 	var dat interface{}
 
@@ -111,11 +141,11 @@ func (f *forecast) Get(path string) (*json.RawMessage, error) {
 		dat = f.DateTime
 	case "visible":
 		dat = f.Visible
-	default:
-		f.lock.Unlock()
-		return nil, &NotFoundError{message: fmt.Sprintf("path not found '%s'", path)}
 	}
 	f.lock.Unlock()
+	if dat == nil {
+		return nil, &NotFoundError{message: fmt.Sprintf("path not found '%s'", path)}
+	}
 
 	if b, err := json.Marshal(dat); err != nil {
 		return nil, err
@@ -129,14 +159,17 @@ func (f *forecast) Post(path string, body *json.RawMessage) (string, error) {
 		return "", &InvalidMethodError{message: "body is null"}
 	}
 
+	temp := false
+
 	switch path {
 	case "visible":
-		f.lock.Lock()
-		defer f.lock.Unlock()
-
-		if err := json.Unmarshal(*body, &(f.Visible)); err != nil {
+		if err := json.Unmarshal(*body, &temp); err != nil {
 			return "", err
 		}
+
+		f.lock.Lock()
+		f.Visible = temp
+		f.lock.Unlock()
 	default:
 		return "", &InvalidMethodError{message: "can only post to 'visible' property"}
 	}
@@ -613,35 +646,35 @@ func (s *Stream) Post(path string, body *json.RawMessage) (string, error) {
 }
 
 type State struct {
-	Forecast  *forecast `json:"forecast"`
-	Display   *display  `json:"display"`
-	Motion    *motion   `json:"motion"`
-	Faces     *faces    `json:"faces"`
-	Streams   *streams  `json:"streams"`
-	OnChanged func()    `json:"-"`
+	Forecast  forecast `json:"forecast"`
+	Display   display  `json:"display"`
+	Motion    motion   `json:"motion"`
+	Faces     faces    `json:"faces"`
+	Streams   streams  `json:"streams"`
+	OnChanged func()   `json:"-"`
 }
 
 func NewState(weatherKey string, weatherUpdateInterval time.Duration, lat float32, long float32, stopper <-chan struct{}) *State {
 	s := &State{
-		Forecast: &forecast{
+		Forecast: forecast{
 			key:     weatherKey,
 			lat:     lat,
 			long:    long,
 			lock:    &sync.Mutex{},
 			timeout: 1 * time.Minute,
 		},
-		Display: &display{
+		Display: display{
 			PowerStatus: "on",
 		},
-		Motion: &motion{
+		Motion: motion{
 			MaxDetections: 4,
 			lock:          &sync.Mutex{},
 		},
-		Faces: &faces{
+		Faces: faces{
 			MaxDetections: 10,
 			lock:          &sync.Mutex{},
 		},
-		Streams: &streams{
+		Streams: streams{
 			lock: &sync.Mutex{},
 		},
 	}
@@ -650,21 +683,9 @@ func NewState(weatherKey string, weatherUpdateInterval time.Duration, lat float3
 	return s
 }
 
-func logPrintIf(err error) {
-	if err != nil {
-		log.Print(err)
-	}
-}
-
 func (s *State) background(weatherUpdateInterval time.Duration, stopper <-chan struct{}) {
 	// background thread
 	ticker := time.NewTicker(weatherUpdateInterval)
-
-	if err := s.Forecast.Update(); err != nil {
-		s.OnChanged()
-	} else {
-		log.Print(err)
-	}
 
 	for {
 		select {
@@ -696,6 +717,7 @@ func (s *State) Load(statePath string) error {
 	} else if err := json.Unmarshal(b, s); err != nil {
 		return err
 	}
+	s.Forecast.Update()
 	return nil
 }
 

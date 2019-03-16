@@ -43,6 +43,8 @@ func (c SocketConn) writer() {
 			break
 		}
 	}
+
+	log.Printf("writer ending")
 }
 
 type ErrorMessage struct {
@@ -96,10 +98,9 @@ func (socks *Sockets) Write(obj interface{}) error {
 	return nil
 }
 
-func (socks *Sockets) reader(c SocketConn) {
+func (socks *Sockets) reader(c SocketConn, stopper chan struct{}) {
 	defer func() {
-		close(c.messages)
-		c.conn.Close()
+		close(stopper)
 	}()
 
 	msg := StateMessage{}
@@ -124,24 +125,49 @@ func (socks *Sockets) reader(c SocketConn) {
 			}
 		}
 	}
+
+	log.Printf("reader ending")
 }
 func (socks *Sockets) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if conn, err := socks.upgrader.Upgrade(w, r, nil); err != nil {
+	var conn *websocket.Conn
+	var err error
+
+	if conn, err = socks.upgrader.Upgrade(w, r, nil); err != nil {
 		log.Printf("error upgrading connection: %v", err)
-	} else {
+		return
+	}
+	socks.locker.Lock()
+	defer socks.locker.Unlock()
+
+	stopper := make(chan struct{})
+
+	c := SocketConn{
+		conn:     conn,
+		messages: make(chan *json.RawMessage),
+	}
+	socks.connections[conn] = c
+	go c.writer()
+	go socks.reader(c, stopper)
+	go func() {
+		<-stopper
+
+		log.Printf("socket cleanup started")
+
+		close(c.messages)
+		conn.Close()
+
 		socks.locker.Lock()
 		defer socks.locker.Unlock()
 
-		c := SocketConn{
-			conn:     conn,
-			messages: make(chan *json.RawMessage),
-		}
-		socks.connections[conn] = c
-		go c.writer()
-		go socks.reader(c)
-	}
+		delete(socks.connections, conn)
+	}()
 }
+
 func (socks *Sockets) Close() {
 	socks.locker.Lock()
 	defer socks.locker.Unlock()
+
+	for c, _ := range socks.connections {
+		c.Close()
+	}
 }

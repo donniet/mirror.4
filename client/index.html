@@ -2,25 +2,74 @@
 <html>
 <head>
   <title>Mirror</title>
+  <script type="text/javascript" src="client/vue.js"></script>
   <script type="text/javascript">
-    function load() {
-      var ws = new WebSocket('{{.WebsocketURL}}');
-      ws.onopen = function(e) {
-        console.log('websocket opened');
-
-        ws.onmessage = function(e) {
-          console.log('message: ', JSON.parse(e.data));
-        }
-
-        ws.send(JSON.stringify({
-          method: 'GET',
-          path: '/'
-        }));
+    function App(websocketUrl, el) {
+      this.websocketUrl = websocketUrl;
+      this.el = el;
+      this.app = null;
+      this.open();
+    }
+    App.prototype.setResponse = function(response) {
+      if (this.app) {
+        this.app.respones = response;
+        return;
       }
+
+      this.app = new Vue({
+        el: this.el,
+        data: {
+          response: response,
+        },
+      });
+    }
+    App.prototype.open = function() {
+      this.ws = new WebSocket(this.websocketUrl);
+      this.ws.onopen = App.prototype.onopen.bind(this);
+    };
+    App.prototype.onopen = function(e) {
+      console.log('websocket opened');
+      this.ws.onmessage = App.prototype.onmessage.bind(this);
+      this.ws.onerror = App.prototype.onerror.bind(this);
+      this.ws.onclose = App.prototype.onclose.bind(this);
+
+      this.sendRequest('GET', '/');
+    };
+    App.prototype.onmessage = function(e) {
+      this.setResponse(JSON.parse(e.data));
+      console.log('message', this.app.response);
+    };
+    App.prototype.onerror = function(e) {
+      console.log('error', e);
+    };
+    App.prototype.onclose = function(e) {
+      setTimeout(function() { this.open(); }.bind(this), 100);
+    };
+    App.prototype.sendRequest = function(method, path, body) {
+      this.ws.send(JSON.stringify({
+        method: method,
+        path: path,
+        body: body
+      }));
+    };
+
+    function load() {
+      var app = new App('[[.WebsocketURL]]', '#template');
     }
   </script>
 </head>
 <body onload="load()">
+  <div id="template">
+    <div class="forecast">
+      <span><img :src="'client/icons/' + response.forecast.icon + '.svg'"/></span>
+      <span class="currentTemperature">{{Math.round(response.forecast.current)}}</span>
+      <span class="temperatureRange">{{Math.round(response.forecast.low)}} - {{Math.round(response.forecast.high)}}</span>
+    </div>
+
+    <div v-for="stream in response.streams">
+      
+    </div>
+  </div>
   <h1>Mirror</h1>
 </body>
 </html>
