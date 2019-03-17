@@ -58,8 +58,8 @@ func (f *forecast) Update() (err error) {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 
-	f.High = w.Daily.Data[0].TemperatureHigh
-	f.Low = w.Daily.Data[0].TemperatureLow
+	f.High = float32(w.Daily.Data[0].TemperatureHigh)
+	f.Low = float32(w.Daily.Data[0].TemperatureLow)
 	// f.Icon = w.Daily.Data[0].Icon
 	f.Summary = w.Daily.Data[0].Summary
 
@@ -69,7 +69,7 @@ func (f *forecast) Update() (err error) {
 			continue
 		}
 
-		f.Current = d.Temperature
+		f.Current = float32(d.Temperature)
 		f.DateTime = time.Time(d.Time)
 		f.Icon = d.Icon
 	}
