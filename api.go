@@ -31,13 +31,14 @@ type Poster interface {
 }
 
 type forecast struct {
-	High     float32   `json:"high"`
-	Low      float32   `json:"low"`
-	Current  float32   `json:"current"`
+	High     float64   `json:"high"`
+	Low      float64   `json:"low"`
+	Current  float64   `json:"current"`
 	Summary  string    `json:"summary"`
 	Icon     string    `json:"icon"`
 	DateTime time.Time `json:"dateTime"`
 	Visible  bool      `json:"visible"`
+	Updated  time.Time `json:"updated"`
 	key      string
 	lat      float32
 	long     float32
@@ -58,20 +59,23 @@ func (f *forecast) Update() (err error) {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 
-	f.High = float32(w.Daily.Data[0].TemperatureHigh)
-	f.Low = float32(w.Daily.Data[0].TemperatureLow)
-	// f.Icon = w.Daily.Data[0].Icon
+	f.High = w.Daily.Data[0].TemperatureHigh.Fahrenheit()
+	f.Low = w.Daily.Data[0].TemperatureLow.Fahrenheit()
+	f.Icon = w.Daily.Data[0].Icon
 	f.Summary = w.Daily.Data[0].Summary
+	f.Current = w.Daily.Data[0].Temperature.Fahrenheit()
 
-	now := time.Now()
+	f.Updated = time.Now()
 	for _, d := range w.Hourly.Data {
-		if time.Time(d.Time).Sub(now) < 0 {
+		if time.Time(d.Time).Sub(f.Updated) < 0 {
 			continue
 		}
 
-		f.Current = float32(d.Temperature)
-		f.DateTime = time.Time(d.Time)
+		f.Current = d.Temperature.Fahrenheit()
+		f.DateTime = d.Time
 		f.Icon = d.Icon
+
+		log.Printf("current: %f", d.Temperature.Fahrenheit())
 	}
 
 	return
@@ -94,10 +98,10 @@ func (f *forecast) MarshalJSON() ([]byte, error) {
 
 func (f *forecast) UnmarshalJSON(b []byte) error {
 	t := struct {
-		High     float32   `json:"high"`
-		Low      float32   `json:"low"`
+		High     float64   `json:"high"`
+		Low      float64   `json:"low"`
 		Icon     string    `json:"icon"`
-		Current  float32   `json:"current"`
+		Current  float64   `json:"current"`
 		Summary  string    `json:"summary"`
 		DateTime time.Time `json:"dateTime"`
 		Visible  bool      `json:"visible"`
@@ -147,7 +151,9 @@ func (f *forecast) Get(path string) (*json.RawMessage, error) {
 		return nil, &NotFoundError{message: fmt.Sprintf("path not found '%s'", path)}
 	}
 
-	if b, err := json.Marshal(dat); err != nil {
+	if dat == nil {
+		return nil, &NotFoundError{message: fmt.Sprintf("path not found '%s'", path)}
+	} else if b, err := json.Marshal(dat); err != nil {
 		return nil, err
 	} else {
 		return (*json.RawMessage)(&b), nil

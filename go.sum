@@ -1,4 +1,8 @@
 github.com/donniet/darksky v0.0.0-20190308121213-3741586bdeee h1:tcrszjMAX49jcCHyx0R/3M9d1sI5UATYD2Clsaa+nJQ=
 github.com/donniet/darksky v0.0.0-20190308121213-3741586bdeee/go.mod h1:v2w7M78/8X+zMJ25wNv9LNJtosuFgRxnc01nO3QPT3c=
+github.com/donniet/darksky v0.0.0-20190314193122-ecb25132170d h1:OQIpCmDMkfEjYySuEszbQ8nt74ulPeFyJjVc6iYXLuc=
+github.com/donniet/darksky v0.0.0-20190314193122-ecb25132170d/go.mod h1:v2w7M78/8X+zMJ25wNv9LNJtosuFgRxnc01nO3QPT3c=
+github.com/donniet/darksky v0.0.0-20190315154157-60c19135863f h1:js0/ZaYlcrh8Vid4F4kOwPBqU5FRWUYADodqALeX4/8=
+github.com/donniet/darksky v0.0.0-20190315154157-60c19135863f/go.mod h1:v2w7M78/8X+zMJ25wNv9LNJtosuFgRxnc01nO3QPT3c=
 github.com/gorilla/websocket v1.4.0 h1:WDFjx/TMzVgy9VdMMQi2K2Emtwi2QcUQsztZ/zLaH/Q=
 github.com/gorilla/websocket v1.4.0/go.mod h1:E7qHFY5m1UJ88s3WnNqhKjPHQ0heANvMoAMk2YaljkQ=

@@ -113,20 +113,21 @@ func (socks *Sockets) reader(c SocketConn, stopper chan struct{}) {
 			log.Printf("error unmarshalling message: %v", err)
 			buf, _ := json.Marshal(MessageFromError(err))
 			c.messages <- (*json.RawMessage)(&buf)
+			continue
+		}
+
+		var reader io.Reader
+		if msg.Body != nil {
+			reader = bytes.NewReader(*msg.Body)
+		}
+		if r, err := http.NewRequest(msg.Method, msg.Path, reader); err != nil {
+			log.Fatalf("error constructing request: %v", err)
 		} else {
-			var reader io.Reader
-			if msg.Body != nil {
-				reader = bytes.NewReader(*msg.Body)
-			}
-			if r, err := http.NewRequest(msg.Method, msg.Path, reader); err != nil {
-				log.Fatalf("error constructing request: %v", err)
-			} else {
-				socks.state.ServeHTTP(c, r)
-			}
+			socks.state.ServeHTTP(c, r)
 		}
 	}
 
-	log.Printf("reader ending")
+	log.Printf("closing reader")
 }
 func (socks *Sockets) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var conn *websocket.Conn
@@ -136,8 +137,6 @@ func (socks *Sockets) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		log.Printf("error upgrading connection: %v", err)
 		return
 	}
-	socks.locker.Lock()
-	defer socks.locker.Unlock()
 
 	stopper := make(chan struct{})
 
@@ -145,16 +144,16 @@ func (socks *Sockets) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		conn:     conn,
 		messages: make(chan *json.RawMessage),
 	}
+
+	socks.locker.Lock()
 	socks.connections[conn] = c
+	socks.locker.Unlock()
+
 	go c.writer()
 	go socks.reader(c, stopper)
 	go func() {
 		<-stopper
-
-		log.Printf("socket cleanup started")
-
 		close(c.messages)
-		conn.Close()
 
 		socks.locker.Lock()
 		defer socks.locker.Unlock()
@@ -167,7 +166,7 @@ func (socks *Sockets) Close() {
 	socks.locker.Lock()
 	defer socks.locker.Unlock()
 
-	for c, _ := range socks.connections {
-		c.Close()
+	for _, sc := range socks.connections {
+		sc.conn.Close()
 	}
 }
