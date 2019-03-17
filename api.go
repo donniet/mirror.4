@@ -75,7 +75,7 @@ func (f *forecast) Update() (err error) {
 		f.DateTime = d.Time
 		f.Icon = d.Icon
 
-		log.Printf("current: %f", d.Temperature.Fahrenheit())
+		// log.Printf("current: %f", d.Temperature.Fahrenheit())
 	}
 
 	return
