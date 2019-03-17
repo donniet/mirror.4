@@ -439,12 +439,24 @@ func (m *motion) Post(path string, body *json.RawMessage) (string, error) {
 		return "", &BadRequestError{message: "body is nil"}
 	}
 
-	m.lock.Lock()
-	defer m.lock.Unlock()
+	var temp int
 
-	if err := json.Unmarshal(*body, &m.MaxDetections); err != nil {
+	if err := json.Unmarshal(*body, &temp); err != nil {
 		return "", &BadRequestError{message: err.Error()}
 	}
+
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	m.MaxDetections = temp
+
+	if m.MaxDetections < 0 {
+		m.MaxDetections = 0
+	}
+
+	if len(m.Detections) >= m.MaxDetections {
+		m.Detections = m.Detections[0:m.MaxDetections]
+	}
+
 	return path, nil
 }
 
