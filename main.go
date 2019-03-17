@@ -56,7 +56,7 @@ func main() {
 
 	state := NewState(weatherKey, 1*time.Hour, float32(lat), float32(long), stopper)
 
-	if err := state.Load(statePath); err != nil && err != os.ErrNotExist {
+	if err := state.Load(statePath); err != nil && !os.IsNotExist(err) {
 		log.Fatal(err)
 	}
 
