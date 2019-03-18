@@ -831,7 +831,7 @@ func (s *State) Post(path string, body *json.RawMessage) (string, error) {
 	case "streams":
 		p, err = s.Streams.Post(rest, body)
 	case "display":
-		err = &InvalidMethodError{message: "POST not supported"}
+		p, err = s.Display.Post(rest, body)
 	default:
 		err = &NotFoundError{message: fmt.Sprintf("path not found '%s'", path)}
 	}
