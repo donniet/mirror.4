@@ -187,6 +187,34 @@ type display struct {
 	PowerStatus string `json:"powerStatus"`
 }
 
+func (d *display) Post(path string, body *json.RawMessage) (string, error) {
+	if body == nil {
+		return "", &InvalidMethodError{message: "body is null"}
+	}
+
+	temp := ""
+
+	switch path {
+	case "powerStatus":
+		if err := json.Unmarshal(*body, &temp); err != nil {
+			return "", err
+		}
+
+		switch temp {
+		case "on":
+		case "standby":
+		default:
+			return "", &BadRequestError{message: "powerStatus must be other 'on' or 'standby'"}
+		}
+
+		d.PowerStatus = temp
+	default:
+		return "", &InvalidMethodError{message: "can only post to 'powerStatus' property"}
+	}
+
+	return path, nil
+}
+
 func (d *display) Get(path string) (*json.RawMessage, error) {
 	var dat interface{}
 

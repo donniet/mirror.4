@@ -1,0 +1,16 @@
+[Unit]
+Description=Smart Mirror Web
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=pi
+Group=pi
+ExecStart=/home/pi/go/bin/mirror.4  --addr mirror.local:8080 --weatherKey 4ae938e1dbc081c7994b30b4c1bc9651
+WorkingDirectory=/home/pi/go/src/github.com/donniet/mirror.4
+Restart=always
+RestartSec=10
+KillSignal=SIGINT
+
+[Install]
+WantedBy=multi-user.target
