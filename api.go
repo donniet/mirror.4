@@ -236,37 +236,53 @@ func (d *display) Get(path string) (*json.RawMessage, error) {
 
 type faces struct {
 	Detections    []FaceDetection `json:"detections"`
+	People        People          `json:"people"`
 	MaxDetections int             `json:"maxDetections"`
 	lock          sync.Locker
 }
 
 func (s *faces) Put(path string, body *json.RawMessage) (string, error) {
-	d := FaceDetection{}
-
-	if path != "detections" {
-		return "", NewNotFoundError(path)
-	} else if body == nil {
+	if body == nil {
 		return "", &BadRequestError{message: "body is nil"}
-	} else if err := json.Unmarshal(*body, &d); err != nil {
-		return "", err
 	}
 
-	if d.DateTime == (time.Time{}) {
-		d.DateTime = time.Now()
-	}
-	if d.Confidence == 0. {
-		d.Confidence = 1.0
-	}
+	switch path {
+	case "detections":
+		d := FaceDetection{}
+		if err := json.Unmarshal(*body, &d); err != nil {
+			return "", err
+		}
+		if d.DateTime == (time.Time{}) {
+			d.DateTime = time.Now()
+		}
+		if d.Confidence == 0. {
+			d.Confidence = 1.
+		}
+		s.lock.Lock()
+		if len(s.Detections) >= s.MaxDetections {
+			s.Detections = s.Detections[0 : s.MaxDetections-1]
+		}
+		s.Detections = append([]FaceDetection{d}, s.Detections...)
+		s.lock.Unlock()
+		return "detections/0", nil
+	case "people":
+		p := make(People)
+		if err := json.Unmarshal(*body, &p); err != nil {
+			return "", err
+		}
+		if len(p) == 0 {
+			return "", fmt.Errorf("nothing inserted")
+		}
 
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
-	if len(s.Detections) >= s.MaxDetections {
-		s.Detections = s.Detections[0 : s.MaxDetections-1]
+		s.lock.Lock()
+		for k, o := range p {
+			s.People[k] = o
+		}
+		s.lock.Unlock()
+		return "people", nil
+	default:
+		return "", NewNotFoundError(path)
 	}
-	s.Detections = append([]FaceDetection{d}, s.Detections...)
-
-	return "detections/0", nil
 }
 
 func (f *faces) MarshalJSON() ([]byte, error) {
@@ -275,6 +291,7 @@ func (f *faces) MarshalJSON() ([]byte, error) {
 
 	return json.Marshal(map[string]interface{}{
 		"detections":    f.Detections,
+		"people":        f.People,
 		"maxDetections": f.MaxDetections,
 	})
 }
@@ -324,6 +341,14 @@ type FaceDetection struct {
 	Name       string    `json:"name"`
 	Image      string    `json:"image"`
 }
+
+type People map[string]Person
+type Person struct {
+	Distance  float32   `json:"distance"`
+	Embedding Embedding `json:"embedding"`
+}
+
+type Embedding []float32
 
 func (d FaceDetection) Get(path string) (*json.RawMessage, error) {
 	var dat interface{}
