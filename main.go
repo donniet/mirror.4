@@ -2,14 +2,20 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"html/template"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"time"
+
+	"github.com/donniet/darksky"
+
+	"github.com/donniet/mirror.4/state"
 )
 
 const (
@@ -45,25 +51,149 @@ func mustExecuteTemplate(fileName string, templateName string, dat interface{}) 
 	return buf.Bytes()
 }
 
+func updateWeather(state *State) *StateMessage {
+	service := darksky.NewService(weatherKey)
+	res, err := service.Get(float32(lat), float32(long))
+	if err != nil {
+		log.Printf("error getting weather %v", err)
+		return nil
+	}
+
+	// should do locked...
+	state.Forecast.Updated = time.Now()
+	state.Forecast.DateTime = res.Currently.Time
+	state.Forecast.High = res.Currently.TemperatureHigh.Fahrenheit()
+	state.Forecast.Low = res.Currently.TemperatureLow.Fahrenheit()
+	state.Forecast.Icon = res.Currently.Icon
+	state.Forecast.Summary = res.Currently.Summary
+
+	if len(res.Daily.Data) > 0 {
+		// log.Printf("hourly")
+		state.Forecast.High = res.Daily.Data[0].TemperatureHigh.Fahrenheit()
+		state.Forecast.Low = res.Daily.Data[0].TemperatureLow.Fahrenheit()
+		state.Forecast.Icon = res.Daily.Data[0].Icon
+	}
+
+	b, err := json.Marshal(state.Forecast)
+	if err != nil {
+		// why would this error?
+		panic(err)
+	}
+
+	return &StateMessage{
+		Method: http.MethodPost,
+		Path:   "forecast",
+		Body:   (*json.RawMessage)(&b),
+	}
+
+}
+
+func weatherUpdator(apiServer *state.Server, state *State, stopper <-chan struct{}, messages chan<- StateMessage) {
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+
+	if msg := updateWeather(state); msg != nil {
+		messages <- *msg
+	}
+
+	for {
+		select {
+		case <-ticker.C:
+			if msg := updateWeather(state); msg != nil {
+				messages <- *msg
+			}
+		case <-stopper:
+			return
+		}
+	}
+}
+
+type StateServer struct {
+	messages chan<- StateMessage
+	server   *state.Server
+}
+
+func (s *StateServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var body []byte
+	var err error
+	var res []byte
+	var path string
+
+	if r.Body != nil {
+		body, err = ioutil.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		res, err = s.server.Get(r.URL.Path)
+	case http.MethodPost:
+		path, err = s.server.Post(r.URL.Path, body)
+	case http.MethodPut:
+		path, err = s.server.Put(r.URL.Path, body)
+	case http.MethodDelete:
+		err = s.server.Delete(r.URL.Path)
+	default:
+		http.Error(w, "method not supported", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if err != nil {
+		if s, ok := err.(state.Statuser); ok {
+			http.Error(w, err.Error(), s.Status())
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+
+	if r.Method != http.MethodGet {
+		s.messages <- StateMessage{
+			Body:   (*json.RawMessage)(&body),
+			Method: r.Method,
+			Path:   r.URL.Path,
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if path != "" {
+		w.Header().Set("Location", path)
+	}
+	if len(res) > 0 {
+		w.Write(res)
+	}
+}
+
 func main() {
 	log.SetFlags(log.Lshortfile | log.LstdFlags)
 	flag.Parse()
 
 	interrupt := make(chan os.Signal)
-	stopper := make(chan struct{})
-
 	signal.Notify(interrupt, os.Interrupt)
 
-	state := NewState(weatherKey, 1*time.Hour, float32(lat), float32(long), stopper)
+	stopper := make(chan struct{})
+	messages := make(chan StateMessage)
 
-	if err := state.Load(statePath); err != nil && !os.IsNotExist(err) {
+	local := new(State)
+	apiServer := state.NewServer(local)
+	stateServer := &StateServer{
+		messages: messages,
+		server:   apiServer,
+	}
+
+	if err := local.Load(statePath); err != nil && !os.IsNotExist(err) {
 		log.Fatal(err)
 	}
 
-	sockets := NewSockets(state, stopper)
+	go weatherUpdator(apiServer, local, stopper, messages)
+
+	sockets := NewSockets(stateServer, stopper)
 
 	mux := http.NewServeMux()
-	mux.Handle("/api/", http.StripPrefix("/api", state))
+	mux.Handle("/api/", http.StripPrefix("/api", stateServer))
 	mux.Handle("/websocket", sockets)
 	mux.Handle("/client/", http.StripPrefix("/client/", http.FileServer(http.Dir("client"))))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -74,19 +204,21 @@ func main() {
 		w.Write(indexBytes)
 	})
 
-	state.OnChanged = func() {
-		if err := state.Save(statePath); err != nil {
-			log.Fatal(err)
-		}
-		sockets.Write(state)
-	}
-	// try saving the state, better to fail now than later
-	state.OnChanged()
-
 	s := http.Server{
 		Addr:    addr,
 		Handler: mux,
 	}
+
+	go func() {
+		for {
+			select {
+			case msg := <-messages:
+				sockets.Write(msg)
+			case <-stopper:
+				return
+			}
+		}
+	}()
 
 	// graceful shutdown on interrupt
 	go func() {
@@ -94,6 +226,7 @@ func main() {
 
 		log.Println("shutting down")
 		close(stopper)
+		close(messages)
 		s.Close()
 	}()
 

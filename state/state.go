@@ -7,27 +7,20 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 )
 
-var podKinds map[reflect.Kind]bool
-
-func init() {
-	podKinds = map[reflect.Kind]bool{
-		reflect.Bool:       true,
-		reflect.Int:        true,
-		reflect.Int8:       true,
-		reflect.Int16:      true,
-		reflect.Int32:      true,
-		reflect.Int64:      true,
-		reflect.Uint:       true,
-		reflect.Uint8:      true,
-		reflect.Uint16:     true,
-		reflect.Uint32:     true,
-		reflect.Uint64:     true,
-		reflect.Complex64:  true,
-		reflect.Complex128: true,
-		reflect.String:     true,
-	}
+type Getter interface {
+	Get(path string) ([]byte, error)
+}
+type Putter interface {
+	Put(path string, body []byte) (string, error)
+}
+type Poster interface {
+	Post(path string, body []byte) (string, error)
+}
+type Deleter interface {
+	Delete(path string) error
 }
 
 func chompPath(path string) (string, string) {
@@ -48,13 +41,24 @@ func chompPath(path string) (string, string) {
 	return path[0:slash], path[slash+1:]
 }
 
+// Server wraps an interface and adds Get, Put, Post and Delete methods
 type Server struct {
 	Data       interface{}
 	fieldCache map[reflect.Type]map[string]int
+	locker     sync.Locker
 }
 
+// DoLocked executes the task function while locked
+func (s *Server) DoLocked(task func()) {
+	s.locker.Lock()
+	defer s.locker.Unlock()
+
+	task()
+}
+
+// NewServer creates a new server from an interface{}
 func NewServer(dat interface{}) *Server {
-	return &Server{Data: dat}
+	return &Server{Data: dat, locker: new(sync.Mutex)}
 }
 
 func (s *Server) fieldIndexByName(t reflect.Type, name string) int {
@@ -104,28 +108,42 @@ func (s *Server) fieldIndexByName(t reflect.Type, name string) int {
 	return -1
 }
 
+// Statuser returns a status compatible with http.Status* messages
 type Statuser interface {
+	error
 	Status() int
 }
 
+// NotFoundError returns a 404 status
 type NotFoundError string
 
-func (e NotFoundError) Status() int   { return http.StatusNotFound }
+// Status returns http.StatusNotFound
+func (e NotFoundError) Status() int { return http.StatusNotFound }
+
+// Error returns an error message compatible with error
 func (e NotFoundError) Error() string { return string(e) }
 
+// InternalServerError returns a 500 status
 type InternalServerError string
 
-func (e InternalServerError) Status() int   { return http.StatusInternalServerError }
+// Status returns http.StatusInternalServerError
+func (e InternalServerError) Status() int { return http.StatusInternalServerError }
+
+// Error returns an error message compatible with error
 func (e InternalServerError) Error() string { return string(e) }
 
+// BadRequestError returns a 400 status
 type BadRequestError string
 
-func (e BadRequestError) Status() int   { return http.StatusBadRequest }
+// Status returns an http.StatusBadRequest
+func (e BadRequestError) Status() int { return http.StatusBadRequest }
+
+// Error returns an error message compatible with error
 func (e BadRequestError) Error() string { return string(e) }
 
 func (s *Server) nextValue(v reflect.Value, path string) (child reflect.Value, rest string, err error) {
 	if v == (reflect.Value{}) {
-		err = fmt.Errorf("empty value")
+		err = InternalServerError("empty value")
 		return
 	}
 
@@ -136,22 +154,22 @@ func (s *Server) nextValue(v reflect.Value, path string) (child reflect.Value, r
 	first, rest = chompPath(path)
 
 	if first == "" {
-		err = fmt.Errorf("empty path")
-		return
+		return v, "", nil
 	}
 
 	dex := 0
 	if v.Kind() == reflect.Struct {
+		// log.Printf("looking for field '%s' in type '%v'", first, v.Type())
 		dex = s.fieldIndexByName(v.Type(), first)
 		if dex < 0 {
-			err = fmt.Errorf("field not found")
+			err = NotFoundError("field not found")
 			return
 		}
 		child = v.Field(dex)
 	} else if v.Kind() == reflect.Slice || v.Kind() == reflect.Array {
 		d := int64(0)
 		if d, err = strconv.ParseInt(first, 10, 64); err != nil || d < 0 || d >= int64(v.Len()) {
-			err = fmt.Errorf("invalid integer conversion")
+			err = BadRequestError("invalid integer conversion")
 			return
 		} else {
 			dex = int(d)
@@ -163,64 +181,46 @@ func (s *Server) nextValue(v reflect.Value, path string) (child reflect.Value, r
 			child = v.MapIndex(reflect.ValueOf(first))
 
 			if child == (reflect.Value{}) {
-				err = fmt.Errorf("key not found")
+				err = NotFoundError("key not found")
 				return
 			}
 		} else {
 			// only accept map[string]type for now
-			err = fmt.Errorf("only map[string]type allowed")
+			err = BadRequestError("only map[string]type allowed")
 			return
 		}
 	} else {
-		err = fmt.Errorf("type does not allow elements")
+		err = BadRequestError("type does not allow elements")
 		return
 	}
 
 	return
 }
 
-func (s *Server) Get(path string) (*json.RawMessage, error) {
+// Get takes a '/' seperated path and dives into the wrapped interface
+func (s *Server) Get(path string) ([]byte, error) {
+	// this is slow for now, we'll speed it up later
+	s.locker.Lock()
+	defer s.locker.Unlock()
+
 	v := reflect.ValueOf(s.Data)
-	first := ""
-	dex := 0
-	p := path
+	rest := path
+	var err error
 
 	var ret interface{}
 
+	// log.Printf("path: %s", path)
+
 	for v != (reflect.Value{}) {
-		for v.Kind() == reflect.Ptr {
-			v = v.Elem()
+		v, rest, err = s.nextValue(v, rest)
+
+		// log.Printf("rest: %s", rest)
+		if err != nil {
+			return nil, err
 		}
 
-		first, p = chompPath(p)
-
-		if first == "" {
+		if rest == "" {
 			ret = v.Interface()
-			break
-		}
-
-		if v.Kind() == reflect.Struct {
-			dex = s.fieldIndexByName(v.Type(), first)
-			if dex < 0 {
-				break
-			}
-			v = v.Field(dex)
-		} else if v.Kind() == reflect.Slice || v.Kind() == reflect.Array {
-			if d, err := strconv.ParseInt(first, 10, 64); err != nil || d < 0 || d >= int64(v.Len()) {
-				break
-			} else {
-				dex = int(d)
-			}
-
-			v = v.Index(int(dex))
-		} else if v.Kind() == reflect.Map {
-			if v.Type().Key().Kind() == reflect.String {
-				v = v.MapIndex(reflect.ValueOf(first))
-			} else {
-				// only accept map[string]type for now
-				break
-			}
-		} else {
 			break
 		}
 	}
@@ -232,83 +232,177 @@ func (s *Server) Get(path string) (*json.RawMessage, error) {
 	if b, err := json.Marshal(ret); err != nil {
 		return nil, InternalServerError(err.Error())
 	} else {
-		return (*json.RawMessage)(&b), nil
+		return b, nil
 	}
 }
-func (s *Server) Post(path string, body *json.RawMessage) (string, error) {
-	v := reflect.ValueOf(s.Data)
-	p := path
-	first := ""
-	dex := -1
 
-	if body == nil || len(*body) == 0 {
-		return "", BadRequestError("body is empty")
+// Post allows modification of a field in the wrapped interface
+func (s *Server) Post(path string, body []byte) (string, error) {
+	// this is slow for now, we'll speed it up later
+	s.locker.Lock()
+	defer s.locker.Unlock()
+
+	v := reflect.ValueOf(s.Data)
+	rest := path
+	var err error
+
+	notFound := NotFoundError(fmt.Sprintf("'%s' not found", path))
+
+	if v == (reflect.Value{}) {
+		return "", notFound
 	}
 
-	for v != (reflect.Value{}) {
-		var w reflect.Value
-
-		for v.Kind() == reflect.Ptr {
-			v = v.Elem()
+	for rest != "" {
+		v, rest, err = s.nextValue(v, rest)
+		if err != nil {
+			return "", err
 		}
 
-		first, p = chompPath(p)
+		if v == (reflect.Value{}) {
+			return "", notFound
+		}
+	}
 
-		if first == "" {
+	if v.Kind() != reflect.Ptr {
+		if !v.CanAddr() {
+			return "", notFound
+		}
+		v = v.Addr()
+	}
+	if !v.CanInterface() {
+		return "", notFound
+	}
+	if err := json.Unmarshal(body, v.Interface()); err != nil {
+		return "", InternalServerError(err.Error())
+	}
+	return path, nil
+}
+
+// Put adds a new element to map or slice
+func (s *Server) Put(path string, body []byte) (string, error) {
+	// this is slow for now, we'll speed it up later
+	s.locker.Lock()
+	defer s.locker.Unlock()
+
+	v := reflect.ValueOf(s.Data)
+	rest := path
+	var err error
+
+	notFound := NotFoundError(fmt.Sprintf("'%s' not found", path))
+
+	if v == (reflect.Value{}) {
+		return "", notFound
+	}
+
+	for {
+		if v.Kind() == reflect.Map && strings.Index(rest, "/") < 0 {
+			break
+		} else if rest == "" {
 			break
 		}
 
-		if v.Kind() == reflect.Struct {
-			dex = s.fieldIndexByName(v.Type(), first)
-			if dex < 0 {
-				break
-			}
-			w = v.Field(dex)
-		} else if v.Kind() == reflect.Slice || v.Kind() == reflect.Array {
-			d, err := strconv.ParseInt(first, 10, 64)
-			if err != nil || d < 0 || d >= int64(v.Len()) {
-				break
-			}
-			dex = int(d)
-			w = v.Index(dex)
-		} else if v.Kind() == reflect.Map {
-			if v.Type().Key().Kind() == reflect.String {
-				w = v.MapIndex(reflect.ValueOf(first))
-			} else {
-				break
-			}
+		v, rest, err = s.nextValue(v, rest)
+		if err != nil {
+			return "", err
 		}
 
-		if w == (reflect.Value{}) {
-			break
+		if v == (reflect.Value{}) {
+			return "", notFound
 		}
+	}
 
-		if p != "" {
-			continue
-		}
+	if v.Kind() != reflect.Map && v.Kind() != reflect.Slice {
+		return "", BadRequestError("not allowed")
+	}
 
-		if w.Kind() != reflect.Ptr {
-			if !w.CanAddr() {
-				break
-			}
-			w = w.Addr()
-		}
+	el := v.Type().Elem()
+	var n reflect.Value
 
-		if !w.CanInterface() {
-			break
-		}
+	indirect := false
+	if el.Kind() == reflect.Ptr {
+		el = el.Elem()
+		indirect = true
+	}
+	n = reflect.New(el)
 
-		if err := json.Unmarshal(*body, w.Interface()); err != nil {
-			return "", InternalServerError(err.Error())
+	if err := json.Unmarshal(body, n.Interface()); err != nil {
+		return "", BadRequestError(err.Error())
+	}
+
+	// log.Printf("v.Kind() == %v", v.Kind())
+	if v.Kind() == reflect.Map {
+		// add to the key
+		if indirect {
+			v.SetMapIndex(reflect.ValueOf(rest), n)
+		} else {
+			v.SetMapIndex(reflect.ValueOf(rest), n.Elem())
 		}
 		return path, nil
+	} else if v.Kind() == reflect.Slice {
+		// append
+		if indirect {
+			v.Set(reflect.Append(v, n))
+		} else {
+			v.Set(reflect.Append(v, n.Elem()))
+		}
+		rest = fmt.Sprintf("%d", v.Len()-1)
+		return path + "/" + rest, nil
 	}
 
-	return "", NotFoundError(fmt.Sprintf("'%s' not found", path))
+	return "", BadRequestError("path not map or slice")
 }
-func (s *Server) Put(path string, body *json.RawMessage) (string, error) {
-	return "", nil
-}
+
+// Delete removes an item from a slice or map
 func (s *Server) Delete(path string) error {
+	// this is slow for now, we'll speed it up later
+	s.locker.Lock()
+	defer s.locker.Unlock()
+
+	v := reflect.ValueOf(s.Data)
+	rest := path
+	var err error
+
+	notFound := NotFoundError(fmt.Sprintf("'%s' not found", path))
+
+	if v.Kind() == reflect.Invalid {
+		return notFound
+	}
+
+	for {
+		if strings.Index(rest, "/") < 0 {
+			break
+		}
+
+		v, rest, err = s.nextValue(v, rest)
+		if err != nil {
+			return err
+		}
+
+		if v == (reflect.Value{}) {
+			return notFound
+		}
+	}
+
+	if v.Kind() == reflect.Map {
+		// nil set
+		d := v.MapIndex(reflect.ValueOf(rest))
+		if d.Kind() == reflect.Invalid {
+			return NotFoundError(fmt.Sprintf("key not found '%s'", rest))
+		}
+		v.SetMapIndex(reflect.ValueOf(rest), reflect.Value{})
+	} else if v.Kind() == reflect.Slice {
+		if n, err := strconv.ParseInt(rest, 10, 64); err != nil {
+			return BadRequestError(err.Error())
+		} else if i := int(n); i < 0 || i >= v.Len() {
+			return NotFoundError(fmt.Sprintf("index '%d' out of range", i))
+		} else if !v.CanSet() {
+			return InternalServerError("cannot set slice")
+		} else {
+			v.Set(reflect.AppendSlice(v.Slice(0, i), v.Slice(i+1, v.Len())))
+		}
+	} else {
+		return BadRequestError(fmt.Sprintf("cannot delete from type %v", v.Kind()))
+	}
+
 	return nil
 }

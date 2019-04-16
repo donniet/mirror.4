@@ -58,15 +58,15 @@ func MessageFromError(err error) ErrorMessage {
 type Sockets struct {
 	locker      sync.Locker
 	upgrader    websocket.Upgrader
-	state       *State
+	server      http.Handler
 	stopper     <-chan struct{}
 	connections map[*websocket.Conn]SocketConn
 }
 
-func NewSockets(state *State, stopper <-chan struct{}) *Sockets {
+func NewSockets(state http.Handler, stopper <-chan struct{}) *Sockets {
 	ret := &Sockets{
 		locker:  &sync.Mutex{},
-		state:   state,
+		server:  state,
 		stopper: stopper,
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  1024,
@@ -123,7 +123,7 @@ func (socks *Sockets) reader(c SocketConn, stopper chan struct{}) {
 		if r, err := http.NewRequest(msg.Method, msg.Path, reader); err != nil {
 			log.Fatalf("error constructing request: %v", err)
 		} else {
-			socks.state.ServeHTTP(c, r)
+			socks.server.ServeHTTP(c, r)
 		}
 	}
 
