@@ -62,8 +62,8 @@
   <div id="template">
     <div class="forecast">
       <span><img :src="'client/icons/' + response.forecast.icon + '.svg'"/></span>
-      <span class="currentTemperature">{{Math.round(response.forecast.current)}}</span>
-      <span class="temperatureRange">{{Math.round(response.forecast.low)}} - {{Math.round(response.forecast.high)}}</span>
+      <span class="currentTemperature">{{Math.round(response.forecast.current)}}&deg;F</span>
+      <span class="temperatureRange">{{Math.round(response.forecast.low)}}&deg;F - {{Math.round(response.forecast.high)}}&deg;F</span>
     </div>
 
     <div v-for="stream in response.streams">
