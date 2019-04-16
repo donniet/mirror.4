@@ -171,11 +171,10 @@ func main() {
 	log.SetFlags(log.Lshortfile | log.LstdFlags)
 	flag.Parse()
 
-	interrupt := make(chan os.Signal)
-	signal.Notify(interrupt, os.Interrupt)
-
 	stopper := make(chan struct{})
 	messages := make(chan StateMessage)
+	interrupt := make(chan os.Signal)
+	signal.Notify(interrupt, os.Interrupt)
 
 	local := new(State)
 	apiServer := state.NewServer(local)
