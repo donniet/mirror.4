@@ -212,6 +212,7 @@ func main() {
 		for {
 			select {
 			case msg := <-messages:
+				log.Printf("got message: %#v", msg)
 				sockets.Write(msg)
 			case <-stopper:
 				return
