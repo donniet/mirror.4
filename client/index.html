@@ -30,12 +30,12 @@
 
   body {
     font-family: 'Cairo', sans-serif;
-    background: black;
-    color: white;
+    /* background: black;
+    color: white; */
   }
   path {
-    stroke: white;
-    fill: white;
+    /* stroke: white;
+    fill: white; */
   }
   </style>
   <script type="text/javascript" src="client/vue.js"></script>
@@ -247,10 +247,10 @@
           svgBody: ""
         }
       },
-      props: ['icon'],
+      props: ['src'],
       methods: {
-        loadIcon: function() {
-          loadAsync(this.icon).then(svg => {
+        loadSrc: function() {
+          loadAsync(this.src).then(svg => {
             // get rid of processing elements
             svg = svg.replace(/<\?.*>\s*/g, '');
             svg = svg.replace(/<!.*>\s*/g, '');
@@ -261,14 +261,14 @@
         },
       },
       mounted: function() {
-        this.loadIcon();
+        this.loadSrc();
       },
       watch: {
-        icon: function(newVal, oldVal) {
-          this.loadIcon();
+        src: function(newVal, oldVal) {
+          this.loadSrc();
         },
       },
-      template: '<div id="forecast-icon" v-html="svgBody"></div>',
+      template: '<div v-html="svgBody"></div>',
     });
 
     var days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -334,14 +334,15 @@
 <body onload="load()">
   <div id="template">
     <clock inline-template><div id="time">{{formattedTime}}</div></clock>
-    <div class="forecast">
-      <svg-image :icon="'client/icons/' + response.forecast.icon + '.svg'"></svg-image>
-      <span class="currentTemperature">{{Math.round(response.forecast.current)}}&deg;F</span>
-      <span class="temperatureRange">{{Math.round(response.forecast.low)}}&deg;F - {{Math.round(response.forecast.high)}}&deg;F</span>
+    <div class="forecast" v-show="response.forecast.visible">
+      <span class="forecast-image"><svg-image :src="'client/icons/' + response.forecast.icon + '.svg'"></svg-image></span>
+      <span class="temperature-current">{{Math.round(response.forecast.current)}}&deg;F</span>
+      <span class="temperature-range">{{Math.round(response.forecast.low)}}&deg;F - {{Math.round(response.forecast.high)}}&deg;F</span>
+      <span class="forecast-summary">{{response.forecast.summary}}</span>
     </div>
 
-    <div v-for="stream in response.streams" class="stream">
-      <img :src="stream.url" v-show="stream.visible" />
+    <div v-for="stream in response.streams" class="streams">
+      <img :src="stream.url" v-show="stream.visible" width="768" height="432" />
     </div>
   </div>
 </body>

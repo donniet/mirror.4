@@ -66,6 +66,7 @@ func updateWeather(state *State) *StateMessage {
 	state.Forecast.Low = res.Currently.TemperatureLow.Fahrenheit()
 	state.Forecast.Icon = res.Currently.Icon
 	state.Forecast.Summary = res.Currently.Summary
+	state.Forecast.Darksky = &res
 
 	if len(res.Daily.Data) > 0 {
 		// log.Printf("hourly")
@@ -213,6 +214,9 @@ func main() {
 			select {
 			case msg := <-messages:
 				log.Printf("got message: %#v", msg)
+				if err := local.Save(statePath); err != nil {
+					log.Fatal(err)
+				}
 				sockets.Write(msg)
 			case <-stopper:
 				return

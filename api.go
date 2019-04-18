@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"time"
+
+	"github.com/donniet/darksky"
 )
 
 type forecast struct {
@@ -15,6 +17,8 @@ type forecast struct {
 	DateTime time.Time `json:"dateTime"`
 	Visible  bool      `json:"visible"`
 	Updated  time.Time `json:"updated"`
+
+	Darksky *darksky.Response `json:"darksky,omitempty"`
 }
 
 type display struct {
