@@ -88,6 +88,9 @@
             response: response,
           };
         },
+        methods: {
+          "formatTime": formatTime,
+        }
       });
     }
     App.prototype.open = function() {
@@ -292,6 +295,21 @@
       return days[d.getDay()] + ' ' + months[d.getMonth()] + ' ' + d.getDate() + numberSuffix(d.getDate()) + ' ' + hour + ':' + minute + ampm;
     }
 
+    function formatTime(d) {
+      var hour = d.getHours();
+      var ampm = 'am';
+      if(hour >= 12) {
+        ampm = 'pm';
+      }
+      if(hour == 0) {
+        hour = 12;
+      } else if (hour > 12) {
+        hour -= 12;
+      }
+
+      return '' + hour + ampm;
+    }
+
     function numberSuffix(num) {
       // num = num << 0;
 
@@ -339,6 +357,12 @@
       <span class="temperature-current">{{Math.round(response.forecast.current)}}&deg;F</span>
       <span class="temperature-range">{{Math.round(response.forecast.low)}}&deg;F - {{Math.round(response.forecast.high)}}&deg;F</span>
       <span class="forecast-summary">{{response.forecast.summary}}</span>
+
+      <div v-for="hour in response.forecast.darksky.hourly.data.slice(0,6)">
+        <span class="forecast-time">{{formatTime(new Date(hour.time * 1000))}}</span>
+        <span class="forecast-image"><svg-image :src="'client/icons/' + hour.icon + '.svg'"></svg-image></span>
+        <span class="temperature-current">{{Math.round(hour.temperature)}}&deg;F</span>
+      </div>
     </div>
 
     <div v-for="stream in response.streams" class="streams">
