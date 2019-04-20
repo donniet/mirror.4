@@ -59,6 +59,8 @@ func updateWeather(state *State) *StateMessage {
 		return nil
 	}
 
+	log.Printf("updating weather: %v", res)
+
 	// should do locked...
 	state.Forecast.Updated = time.Now()
 	state.Forecast.DateTime = res.Currently.Time
