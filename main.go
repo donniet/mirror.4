@@ -90,7 +90,7 @@ func updateWeather(state *State) *StateMessage {
 }
 
 func weatherUpdator(apiServer *state.Server, state *State, stopper <-chan struct{}, messages chan<- StateMessage) {
-	ticker := time.NewTicker(time.Hour)
+	ticker := time.NewTicker(2 * time.Hour)
 	defer ticker.Stop()
 
 	if msg := updateWeather(state); msg != nil {
