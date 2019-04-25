@@ -3,8 +3,10 @@ package state
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -61,9 +63,9 @@ func NewServer(dat interface{}) *Server {
 	return &Server{Data: dat, locker: new(sync.Mutex)}
 }
 
-func (s *Server) fieldIndexByName(t reflect.Type, name string) int {
+func (s *Server) fieldIndexByName(t reflect.Type, name string) (int, reflect.StructTag) {
 	if t.Kind() != reflect.Struct {
-		return -1
+		return -1, ""
 	}
 
 	if s.fieldCache == nil {
@@ -102,10 +104,10 @@ func (s *Server) fieldIndexByName(t reflect.Type, name string) int {
 	}
 
 	if dex, ok := cache[name]; ok {
-		return dex
+		return dex, t.Field(dex).Tag
 	}
 
-	return -1
+	return -1, ""
 }
 
 // Statuser returns a status compatible with http.Status* messages
@@ -141,7 +143,7 @@ func (e BadRequestError) Status() int { return http.StatusBadRequest }
 // Error returns an error message compatible with error
 func (e BadRequestError) Error() string { return string(e) }
 
-func (s *Server) nextValue(v reflect.Value, path string) (child reflect.Value, rest string, err error) {
+func (s *Server) nextValue(v reflect.Value, path string) (child reflect.Value, rest string, tag reflect.StructTag, err error) {
 	if v == (reflect.Value{}) {
 		err = InternalServerError("empty value")
 		return
@@ -154,13 +156,13 @@ func (s *Server) nextValue(v reflect.Value, path string) (child reflect.Value, r
 	first, rest = chompPath(path)
 
 	if first == "" {
-		return v, "", nil
+		return v, "", "", nil
 	}
 
 	dex := 0
 	if v.Kind() == reflect.Struct {
 		// log.Printf("looking for field '%s' in type '%v'", first, v.Type())
-		dex = s.fieldIndexByName(v.Type(), first)
+		dex, tag = s.fieldIndexByName(v.Type(), first)
 		if dex < 0 {
 			err = NotFoundError("field not found")
 			return
@@ -206,13 +208,12 @@ func (s *Server) Get(path string) ([]byte, error) {
 	v := reflect.ValueOf(s.Data)
 	rest := path
 	var err error
-
 	var ret interface{}
 
 	// log.Printf("path: %s", path)
 
 	for v != (reflect.Value{}) {
-		v, rest, err = s.nextValue(v, rest)
+		v, rest, _, err = s.nextValue(v, rest)
 
 		// log.Printf("rest: %s", rest)
 		if err != nil {
@@ -253,7 +254,7 @@ func (s *Server) Post(path string, body []byte) (string, error) {
 	}
 
 	for rest != "" {
-		v, rest, err = s.nextValue(v, rest)
+		v, rest, _, err = s.nextValue(v, rest)
 		if err != nil {
 			return "", err
 		}
@@ -278,6 +279,24 @@ func (s *Server) Post(path string, body []byte) (string, error) {
 	return path, nil
 }
 
+type apiTag string
+
+func (a apiTag) Maximum() int {
+	s := string(a)
+
+	r := regexp.MustCompile("maximum=(\\d+)")
+
+	matches := r.FindStringSubmatch(s)
+
+	if len(matches) != 2 {
+		return math.MaxInt32
+	}
+
+	max, _ := strconv.ParseInt(matches[1], 10, 32)
+	return int(max)
+
+}
+
 // Put adds a new element to map or slice
 func (s *Server) Put(path string, body []byte) (string, error) {
 	// this is slow for now, we'll speed it up later
@@ -286,6 +305,7 @@ func (s *Server) Put(path string, body []byte) (string, error) {
 
 	v := reflect.ValueOf(s.Data)
 	rest := path
+	tag := reflect.StructTag("")
 	var err error
 
 	notFound := NotFoundError(fmt.Sprintf("'%s' not found", path))
@@ -301,7 +321,7 @@ func (s *Server) Put(path string, body []byte) (string, error) {
 			break
 		}
 
-		v, rest, err = s.nextValue(v, rest)
+		v, rest, tag, err = s.nextValue(v, rest)
 		if err != nil {
 			return "", err
 		}
@@ -340,6 +360,18 @@ func (s *Server) Put(path string, body []byte) (string, error) {
 		return path, nil
 	} else if v.Kind() == reflect.Slice {
 		// append
+		max := math.MaxInt32
+
+		if t, ok := tag.Lookup("api"); ok {
+			a := apiTag(t)
+
+			max = a.Maximum()
+		}
+
+		if v.Len() >= max {
+			v.Set(v.Slice(v.Len()-max+1, v.Len()))
+		}
+
 		if indirect {
 			v.Set(reflect.Append(v, n))
 		} else {
@@ -373,7 +405,7 @@ func (s *Server) Delete(path string) error {
 			break
 		}
 
-		v, rest, err = s.nextValue(v, rest)
+		v, rest, _, err = s.nextValue(v, rest)
 		if err != nil {
 			return err
 		}

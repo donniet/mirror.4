@@ -25,7 +25,7 @@ type display struct {
 	PowerStatus string `json:"powerStatus"`
 }
 type faces struct {
-	Detections    []FaceDetection `json:"detections"`
+	Detections    []FaceDetection `json:"detections",api:"maximum=50"`
 	People        People          `json:"people"`
 	MaxDetections int             `json:"maxDetections"`
 }

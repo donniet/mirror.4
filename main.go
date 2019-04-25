@@ -52,6 +52,8 @@ func mustExecuteTemplate(fileName string, templateName string, dat interface{}) 
 }
 
 func updateWeather(state *State) *StateMessage {
+	log.Printf("starting weather updator")
+
 	service := darksky.NewService(weatherKey)
 	res, err := service.Get(float32(lat), float32(long))
 	if err != nil {
