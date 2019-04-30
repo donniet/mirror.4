@@ -102,8 +102,8 @@
       <img :src="stream.url" v-show="stream.visible" width="768" height="432" />
     </div>
 
-    <div v-for="face in response.faces.detctions" class="faces">
-      <img :src="face.image" width="160" height="160" />
+    <div v-for="face in response.faces.detections" class="faces">
+      <img :src="'data:'+face.image" width="160" height="160" />
     </div>
   </div>
 </body>
