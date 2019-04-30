@@ -71,6 +71,9 @@
     width: 75px;
     text-align: center;
   }
+  .faces {
+    width: 100%;
+  }
   .faces img {
     display: flex;
   }
@@ -102,8 +105,8 @@
       <img :src="stream.url" v-show="stream.visible" width="768" height="432" />
     </div>
 
-    <div v-for="face in response.faces.detections" class="faces">
-      <img :src="'data:'+face.image" width="160" height="160" />
+    <div class="faces">
+      <img v-for="face in response.faces.detections" :src="'data:'+face.image" width="160" height="160" />
     </div>
   </div>
 </body>
