@@ -39,7 +39,7 @@
     fill: white;
   }
   #time {
-    font-size: 24px;
+    font-size: 36px;
   }
   .forecast-now .forecast-image svg {
     width: 100px;
@@ -102,7 +102,7 @@
       </div>
     </div>
 
-    <div v-for="(index,stream) in response.streams" class="streams" v-if="response.display.powerStatus == 'on'">
+    <div v-for="(stream,index) in response.streams" class="streams" v-if="response.display.powerStatus == 'on'">
       <img :src="stream.url" v-show="stream.visible" width="768" height="432" v-on:error="markError(index)" />
     </div>
 
