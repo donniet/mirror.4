@@ -2,13 +2,13 @@ function loadAsync(url) {
     return new Promise(function (resolve, reject) {
         let xhr = new XMLHttpRequest();
         xhr.onreadystatechange = function(evt) {
-        if (xhr.readyState == 4) {
-            if (xhr.status == 200) {
-            resolve(xhr.responseText);
-            } else {
-            resolve(null);
+            if (xhr.readyState == 4) {
+                if (xhr.status == 200) {
+                    resolve(xhr.responseText);
+                } else {
+                    resolve(null);
+                }
             }
-        }
         }
         xhr.open('GET', url, true);
         xhr.send();
@@ -30,6 +30,7 @@ function App(websocketUrl, el) {
     this.websocketUrl = websocketUrl;
     this.el = el;
     this.app = null;
+    this.checkStreams = new Object();
     this.open();
 }
 App.prototype.setResponse = function(response) {
@@ -42,14 +43,29 @@ App.prototype.setResponse = function(response) {
     this.app = new Vue({
         el: this.el,
         data: function() {
-        return {
-            response: response,
-        };
+            return {
+                response: response,
+            };
         },
         methods: {
-        "formatTime": formatTime,
+            "formatTime": formatTime,
+            "markError": App.prototype.markStreamError.bind(this),
         }
     });
+};
+App.prototype.markStreamError = function(index) {
+    this.sendMessage({
+        'method': 'POST',
+        'path': `streams/${index}/errorTime`,
+        'body': new Date(),
+    });
+    
+    if(!this.checkStreams[index]) {
+        this.checkStreams[index] = this.app.response.streams[index];
+    }
+}
+App.prototype.sendMessage = function(msg) {
+    this.ws.send(JSON.stringify(msg));
 }
 App.prototype.open = function() {
     this.ws = new WebSocket(this.websocketUrl);
@@ -72,10 +88,10 @@ function postHelper(data, path, body) {
         if (first == "") continue;
 
         if (data[first]) {
-        data = data[first];
+            data = data[first];
         } else {
-        console.log('could not find path', path, data);
-        return;
+            console.log('could not find path', path, data);
+            return;
         }
 
         console.log(first, path);
@@ -91,22 +107,22 @@ function putHelper(data, path, body) {
     while(path != "") {
         let slash = path.indexOf('/');
         if (slash >= 0) {
-        first = path.substring(0, slash);
-        path = path.substring(slash + 1);
+            first = path.substring(0, slash);
+            path = path.substring(slash + 1);
         } else if (typeof data == 'object' && typeof data.length != 'number') {
-        console.log('overwriting', first, data, body);
-        data[first] = body;
-        return;
+            console.log('overwriting', first, data, body);
+            data[first] = body;
+            return;
         } else {
-        first = path;
-        path = "";
+            first = path;
+            path = "";
         }
         // ignore double slashes
         if (first == "") continue;
 
         if (!data[first]) {
-        console.log('could not find path', first, data);
-        return;
+            console.log('could not find path', first, data);
+            return;
         }
 
         data = data[first];
@@ -133,8 +149,8 @@ function deleteHelper(data, path) {
         if(first == "") continue;
 
         if(!data[first]) {
-        console.log('could not find path', first, data);
-        break;
+            console.log('could not find path', first, data);
+            break;
         }
 
         data = data[first];
@@ -148,8 +164,8 @@ function deleteHelper(data, path) {
     if (typeof data.length == 'number') {
         let index = parseInt(path, 10);
         if (isNaN(index) || index < 0 || index >= data.length) {
-        console.log('could not delete', path, data);
-        return;
+            console.log('could not delete', path, data);
+            return;
         }
         console.log('splicing from array', index, data);
         data.splice(index, 1);
@@ -187,14 +203,14 @@ App.prototype.onmessage = function(e) {
     default:
         return;
     }
-    };
-    App.prototype.onerror = function(e) {
+};
+App.prototype.onerror = function(e) {
     console.log('error', e);
-    };
-    App.prototype.onclose = function(e) {
-    setTimeout(function() { this.open(); }.bind(this), 100);
-    };
-    App.prototype.sendRequest = function(method, path, body) {
+};
+App.prototype.onclose = function(e) {
+    setTimeout(function() { this.open(); }.bind(this), 1000);
+};
+App.prototype.sendRequest = function(method, path, body) {
     this.ws.send(JSON.stringify({
         method: method,
         path: path,
@@ -282,21 +298,21 @@ function numberSuffix(num) {
 Vue.component('clock', {
     data: function() {
         return {
-        time: new Date(),
-        formattedTime: ''
+            time: new Date(),
+            formattedTime: ''
         }
     },
     methods: {
         updateTime: function() {
-        this.time = new Date();
-        this.formattedTime = formatDate(this.time);
+            this.time = new Date();
+            this.formattedTime = formatDate(this.time);
         }
     },
     mounted: function() {
         updater = () => {
-        this.updateTime();
-        var seconds = new Date().getSeconds();
-        setTimeout(updater, 1000*(60 - seconds));
+            this.updateTime();
+            var seconds = new Date().getSeconds();
+            setTimeout(updater, 1000*(60 - seconds));
         }
         updater();
     }

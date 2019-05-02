@@ -58,9 +58,10 @@ type motionDetection struct {
 type streams []Stream
 
 type Stream struct {
-	URL     string `json:"url"`
-	Name    string `json:"name"`
-	Visible bool   `json:"visible"`
+	URL       string    `json:"url"`
+	Name      string    `json:"name"`
+	Visible   bool      `json:"visible"`
+	ErrorTime time.Time `json:"errorTime"`
 }
 
 type State struct {

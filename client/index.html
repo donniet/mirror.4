@@ -102,8 +102,8 @@
       </div>
     </div>
 
-    <div v-for="stream in response.streams" class="streams" v-if="response.display.powerStatus == 'on'">
-      <img :src="stream.url" v-show="stream.visible" width="768" height="432" />
+    <div v-for="(index,stream) in response.streams" class="streams" v-if="response.display.powerStatus == 'on'">
+      <img :src="stream.url" v-show="stream.visible" width="768" height="432" v-on:error="markError(index)" />
     </div>
 
     <div class="faces">
