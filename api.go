@@ -9,9 +9,9 @@ import (
 )
 
 type forecast struct {
-	High     float64   `json:"high"`
-	Low      float64   `json:"low"`
-	Current  float64   `json:"current"`
+	High     float32   `json:"high"`
+	Low      float32   `json:"low"`
+	Current  float32   `json:"current"`
 	Summary  string    `json:"summary"`
 	Icon     string    `json:"icon"`
 	DateTime time.Time `json:"dateTime"`

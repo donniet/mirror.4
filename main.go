@@ -65,17 +65,25 @@ func updateWeather(state *State) *StateMessage {
 
 	// should do locked...
 	state.Forecast.Updated = time.Now()
-	state.Forecast.DateTime = res.Currently.Time
-	state.Forecast.High = res.Currently.TemperatureHigh.Fahrenheit()
-	state.Forecast.Low = res.Currently.TemperatureLow.Fahrenheit()
+	state.Forecast.DateTime = time.Time(res.Currently.Time)
+	if res.Currently.TemperatureHigh != nil {
+		state.Forecast.High = *res.Currently.TemperatureHigh
+	}
+	if res.Currently.TemperatureLow != nil {
+		state.Forecast.Low = *res.Currently.TemperatureLow
+	}
 	state.Forecast.Icon = res.Currently.Icon
 	state.Forecast.Summary = res.Currently.Summary
 	state.Forecast.Darksky = &res
 
-	if len(res.Daily.Data) > 0 {
+	if res.Daily != nil && len(res.Daily.Data) > 0 {
 		// log.Printf("hourly")
-		state.Forecast.High = res.Daily.Data[0].TemperatureHigh.Fahrenheit()
-		state.Forecast.Low = res.Daily.Data[0].TemperatureLow.Fahrenheit()
+		if res.Daily.Data[0].TemperatureHigh != nil {
+			state.Forecast.High = *res.Daily.Data[0].TemperatureHigh
+		}
+		if res.Daily.Data[0].TemperatureLow != nil {
+			state.Forecast.Low = *res.Daily.Data[0].TemperatureLow
+		}
 		state.Forecast.Icon = res.Daily.Data[0].Icon
 	}
 
