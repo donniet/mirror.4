@@ -54,9 +54,9 @@
   }
   .forecast {
     position: absolute;
-    width: 250px;
+    width: 230px;
     right: 0px;
-    top: 15px;
+    top: 36px;
   }
   .forecast-hourly .forecast-image .svg-image {
     height: 80px;
@@ -68,10 +68,22 @@
     display: flex;
 
   }
-  .forecast-hourly .temperature-current, .forecast-hourly .forecast-time  {
+  .forecast-hourly .forecast-image {
+    display: block;
+    position:relative;
+  }
+  .forecast-hourly .temperature-current {
     display: block;
     width: 75px;
-    text-align: center;
+    position:relative;
+    left: -65px;
+    top: 30px;
+
+  }
+  .forecast-hourly .forecast-time  {
+    display: block;
+    width: 75px;
+    position:relative;
   }
   .faces {
     width: 100%;
@@ -96,8 +108,8 @@
     <div class="forecast" v-show="response.forecast.visible">
       <div class="forecast-hourly" v-if="response.forecast.darksky">
         <div v-for="hour in response.forecast.darksky.hourly.data.slice(0,12)">
-          <span class="forecast-time">{{formatTime(new Date(hour.time * 1000))}}</span>
           <span class="forecast-image"><svg-image :src="'client/icons/' + hour.icon + '.svg'"></svg-image></span>
+          <span class="forecast-time">{{formatTime(new Date(hour.time * 1000))}}</span>
           <span class="temperature-current">{{Math.round(hour.temperature)}}&deg;</span>
         </div>
       </div>
