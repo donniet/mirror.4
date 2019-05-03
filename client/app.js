@@ -50,8 +50,19 @@ App.prototype.setResponse = function(response) {
         methods: {
             "formatTime": formatTime,
             "markError": App.prototype.markStreamError.bind(this),
+            "markLoaded": App.prototype.markStreamLoaded.bind(this),
         }
     });
+};
+App.prototype.markStreamLoaded = function(index) {
+    this.sendMessage({
+        'method': 'POST',
+        'path': `streams/${index}/errorTime`,
+        'body': null
+    });
+    if(this.checkStreams[index]) {
+        delete this.checkStreams[index];
+    }
 };
 App.prototype.markStreamError = function(index) {
     this.sendMessage({

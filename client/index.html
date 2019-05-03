@@ -33,6 +33,7 @@
     background: black;
     color: white;
     overflow:hidden;
+    font-size: 30px;
   }
   path {
     stroke: white;
@@ -48,17 +49,17 @@
   .forecast-hourly .forecast-image svg {
     position:relative;
     top: -7px;
-    width: 75px;
-    height: 75px;
+    width: 100px;
+    height: 100px;
   }
   .forecast {
     position: absolute;
-    width: 150px;
+    width: 250px;
     right: 0px;
     top: 15px;
   }
   .forecast-hourly .forecast-image .svg-image {
-    height: 60px;
+    height: 80px;
   }
   .forecast-hourly {
     display: block;
@@ -97,13 +98,13 @@
         <div v-for="hour in response.forecast.darksky.hourly.data.slice(0,12)">
           <span class="forecast-time">{{formatTime(new Date(hour.time * 1000))}}</span>
           <span class="forecast-image"><svg-image :src="'client/icons/' + hour.icon + '.svg'"></svg-image></span>
-          <span class="temperature-current">{{Math.round(hour.temperature)}}&deg;F</span>
+          <span class="temperature-current">{{Math.round(hour.temperature)}}&deg;</span>
         </div>
       </div>
     </div>
 
     <div v-for="(stream,index) in response.streams" class="streams" v-if="response.display.powerStatus == 'on'">
-      <img :src="stream.url" v-show="stream.visible" width="768" height="432" v-on:error="markError(index)" />
+      <img :src="stream.url" v-show="stream.visible" width="768" height="432" v-on:error="markError(index)" v-on:load="markLoaded(index)" />
     </div>
 
     <div class="faces">
