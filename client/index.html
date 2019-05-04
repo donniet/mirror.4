@@ -119,9 +119,9 @@
       <img :src="stream.url" v-show="stream.visible" width="768" height="432" v-on:error="markError(index)" v-on:load="markLoaded(index)" />
     </div>
 
-    <div class="faces">
+    <!-- <div class="faces">
       <img v-for="face in response.faces.detections" :src="'data:'+face.image" width="160" height="160" />
-    </div>
+    </div> -->
   </div>
 </body>
 </html>
