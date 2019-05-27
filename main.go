@@ -155,10 +155,12 @@ func (s *StateServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
+		msg, _ := json.Marshal(map[string]string{"error": err.Error()})
+
 		if s, ok := err.(state.Statuser); ok {
-			http.Error(w, err.Error(), s.Status())
+			http.Error(w, string(msg), s.Status())
 		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, string(msg), http.StatusInternalServerError)
 		}
 		return
 	}

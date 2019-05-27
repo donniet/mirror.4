@@ -51,11 +51,11 @@ type Server struct {
 }
 
 // DoLocked executes the task function while locked
-func (s *Server) DoLocked(task func()) {
+func (s *Server) DoLocked(task func() error) error {
 	s.locker.Lock()
 	defer s.locker.Unlock()
 
-	task()
+	return task()
 }
 
 // NewServer creates a new server from an interface{}

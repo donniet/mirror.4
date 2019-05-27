@@ -1,8 +1,11 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
+	"strings"
 	"time"
 
 	"github.com/donniet/darksky"
@@ -34,7 +37,51 @@ type FaceDetection struct {
 	DateTime   time.Time `json:"dateTime"`
 	Confidence float32   `json:"confidence"`
 	Name       string    `json:"name"`
-	Image      string    `json:"image"`
+	Image      DataURI   `json:"image"`
+}
+
+type DataURI struct {
+	contentType string
+	data        []byte
+}
+
+func (d *DataURI) UnmarshalJSON(b []byte) error {
+	if len(b) == 0 {
+		d.contentType = ""
+		d.data = []byte{}
+		return nil
+	}
+
+	str := ""
+	if err := json.Unmarshal(b, &str); err != nil {
+		return err
+	}
+
+	semicolon := strings.IndexRune(str, ';')
+
+	if semicolon < 0 {
+		return fmt.Errorf("semicolon missing from data-uri")
+	}
+
+	// look for "base64," after semicolon
+	if len(str) < semicolon+8 || str[semicolon+1:semicolon+8] != "base64," {
+		return fmt.Errorf("only base64 encoded data-uri is supported")
+	}
+
+	if dat, err := base64.StdEncoding.DecodeString(str[semicolon+8:]); err != nil {
+		return err
+	} else {
+		d.data = dat
+	}
+	d.contentType = str[:semicolon]
+
+	return nil
+}
+
+func (d DataURI) MarshalJSON() ([]byte, error) {
+	str := d.contentType + ";base64," + base64.StdEncoding.EncodeToString(d.data)
+
+	return json.Marshal(str)
 }
 
 type People map[string]Person

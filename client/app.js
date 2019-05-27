@@ -58,7 +58,7 @@ App.prototype.markStreamLoaded = function(index) {
     this.sendMessage({
         'method': 'POST',
         'path': `streams/${index}/errorTime`,
-        'body': null
+        'body': "0001-01-01T00:00:00Z"
     });
     if(this.checkStreams[index]) {
         delete this.checkStreams[index];
