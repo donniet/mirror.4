@@ -54,6 +54,7 @@ App.prototype.setResponse = function(response) {
         },
         computed: {
             recentPeople: function() {
+                console.log('filtered people');
                 let people = this.response.faces.detections;
 
                 return people.filter((p) => {
@@ -204,6 +205,11 @@ App.prototype.onmessage = function(e) {
     var dat = JSON.parse(e.data);
 
     console.log('message', dat, dat.method);
+
+    if (dat.error) {
+        console.log('error received: ', dat.error)
+        return;
+    }
 
     if (!dat.method) {
         this.setResponse(dat);
