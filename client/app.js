@@ -130,7 +130,7 @@ function putHelper(data, path, body) {
         if (slash >= 0) {
             first = path.substring(0, slash);
             path = path.substring(slash + 1);
-        } else if (typeof data == 'object' && typeof data.length != 'number') {
+        } else if (typeof data == 'object' && typeof data[first] == 'object' && data[first].length != 'number') {
             console.log('overwriting', first, data, body);
             data[first] = body;
             return;
