@@ -62,11 +62,15 @@ App.prototype.setResponse = function(response) {
                 });
 
                 p = {}
+                ret = [];
                 for (var d in detections) {
-                    p[d.name] = true;
+                    if (!p[d.name]) {
+                        p[d.name] = true;
+                        ret.push(d);
+                    }
                 }
 
-                return Object.getOwnPropertyNames(p);
+                return ret;
             }
         }
     });
