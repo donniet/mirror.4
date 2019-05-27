@@ -51,6 +51,15 @@ App.prototype.setResponse = function(response) {
             "formatTime": formatTime,
             "markError": App.prototype.markStreamError.bind(this),
             "markLoaded": App.prototype.markStreamLoaded.bind(this),
+        },
+        computed: {
+            recentPeople: function() {
+                let people = this.response.faces.detections;
+
+                return people.filter((p) => {
+                    return ((new Date()).getTime() - Date.parse(p.dateTime).getTime()) < 1000 * 60 * 5; // 5 min
+                });
+            }
         }
     });
 };
