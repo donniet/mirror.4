@@ -123,7 +123,7 @@
     </div>
 
     <div class="faces">
-      <span v-for="p in recentPeople">Hello {p.name}!</span>
+      <p v-for="p in recentPeople">Hello {{p.name}}!</p>
       <!-- <img v-for="face in recentPeople" :src="'data:'+face.image" width="160" height="160" /> -->
     </div>
   </div>
