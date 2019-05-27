@@ -63,7 +63,9 @@ App.prototype.setResponse = function(response) {
 
                 p = {}
                 ret = [];
-                for (var d in detections) {
+                for (var i = 0; i < detections.length; i++) {
+		    let d = detections[i];
+		    console.log('det', d);
                     if (!p[d.name]) {
                         p[d.name] = true;
                         ret.push(d);
