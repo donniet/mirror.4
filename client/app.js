@@ -58,7 +58,7 @@ App.prototype.setResponse = function(response) {
                 let people = this.response.faces.detections;
 
                 return people.filter((p) => {
-                    return ((new Date()).getTime() - Date.parse(p.dateTime).getTime()) < 1000 * 60 * 5; // 5 min
+                    return (new Date()).getTime() - Date.parse(p.dateTime) < 1000 * 60 * 5; // 5 min
                 });
             }
         }
