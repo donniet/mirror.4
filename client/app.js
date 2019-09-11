@@ -57,6 +57,8 @@ App.prototype.setResponse = function(response) {
                 console.log('filtered people');
                 let people = this.response.faces.detections;
 
+                if(!people) return [];
+                
                 detections = people.filter((p) => {
                     return (new Date()).getTime() - Date.parse(p.dateTime) < 1000 * 60 * 5; // 5 min
                 });
@@ -64,8 +66,8 @@ App.prototype.setResponse = function(response) {
                 p = {}
                 ret = [];
                 for (var i = 0; i < detections.length; i++) {
-		    let d = detections[i];
-		    console.log('det', d);
+		            let d = detections[i];
+		            console.log('det', d);
                     if (!p[d.name]) {
                         p[d.name] = true;
                         ret.push(d);
